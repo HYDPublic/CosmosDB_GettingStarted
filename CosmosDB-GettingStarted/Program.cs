@@ -46,10 +46,11 @@ namespace CosmosDB_GettingStarted
         {
             this.client = new DocumentClient(new Uri(EndpointUri), PrimaryKey);
 
+            // Creating database and collection
             await this.client.CreateDatabaseIfNotExistsAsync(new Database { Id = "FamilyDB_oa" });
             await this.client.CreateDocumentCollectionIfNotExistsAsync(UriFactory.CreateDatabaseUri("FamilyDB_oa"), new DocumentCollection { Id = "FamilyCollection_oa" });
 
-            // ADD THIS PART TO YOUR CODE
+            // Mock data
             Family andersenFamily = new Family
             {
                 Id = "Andersen.1",
@@ -113,8 +114,20 @@ namespace CosmosDB_GettingStarted
                 IsRegistered = false
             };
 
+            // Creating documents
             await this.CreateFamilyDocumentIfNotExists("FamilyDB_oa", "FamilyCollection_oa", wakefieldFamily);
 
+            // Updating documents ("replace")
+            this.ExecuteSimpleQuery("FamilyDB_oa", "FamilyCollection_oa");
+            andersenFamily.Children[0].Grade = 6;
+            await this.ReplaceFamilyDocument("FamilyDB_oa", "FamilyCollection_oa", "Andersen.1", andersenFamily);
+            this.ExecuteSimpleQuery("FamilyDB_oa", "FamilyCollection_oa");
+
+            // Deleting documents
+            await this.DeleteFamilyDocument("FamilyDB_oa", "FamilyCollection_oa", "Andersen.1");
+
+            // Clean up/delete the database
+            await this.client.DeleteDatabaseAsync(UriFactory.CreateDatabaseUri("FamilyDB_oa"));
         }
 
         private void WriteToConsoleAndPromptToContinue(string format, params object[] args)
@@ -142,6 +155,68 @@ namespace CosmosDB_GettingStarted
                 {
                     throw;
                 }
+            }
+        }
+
+        // ADD THIS PART TO YOUR CODE
+        private void ExecuteSimpleQuery(string databaseName, string collectionName)
+        {
+            // Set some common query options
+            FeedOptions queryOptions = new FeedOptions { MaxItemCount = -1 };
+
+            // Here we find the Andersen family via its LastName
+            IQueryable<Family> familyQuery = this.client.CreateDocumentQuery<Family>(
+                    UriFactory.CreateDocumentCollectionUri(databaseName, collectionName), queryOptions)
+                    .Where(f => f.LastName == "Andersen");
+
+            // The query is executed synchronously here, but can also be executed asynchronously via the IDocumentQuery<T> interface
+            Console.WriteLine("Running LINQ query...");
+            foreach (Family family in familyQuery)
+            {
+                Console.WriteLine("\tRead {0}", family);
+            }
+
+            // Now execute the same query via direct SQL
+            IQueryable<Family> familyQueryInSql = this.client.CreateDocumentQuery<Family>(
+                    UriFactory.CreateDocumentCollectionUri(databaseName, collectionName),
+                    "SELECT * FROM Family WHERE Family.LastName = 'Andersen'",
+                    queryOptions);
+
+            Console.WriteLine("Running direct SQL query...");
+            foreach (Family family in familyQueryInSql)
+            {
+                Console.WriteLine("\tRead {0}", family);
+            }
+
+            Console.WriteLine("Press any key to continue ...");
+            Console.ReadKey();
+        }
+
+        // ADD THIS PART TO YOUR CODE
+        private async Task ReplaceFamilyDocument(string databaseName, string collectionName, string familyName, Family updatedFamily)
+        {
+            try
+            {
+                await this.client.ReplaceDocumentAsync(UriFactory.CreateDocumentUri(databaseName, collectionName, familyName), updatedFamily);
+                this.WriteToConsoleAndPromptToContinue("Replaced Family {0}", familyName);
+            }
+            catch (DocumentClientException de)
+            {
+                throw;
+            }
+        }
+
+        // ADD THIS PART TO YOUR CODE
+        private async Task DeleteFamilyDocument(string databaseName, string collectionName, string documentName)
+        {
+            try
+            {
+                await this.client.DeleteDocumentAsync(UriFactory.CreateDocumentUri(databaseName, collectionName, documentName));
+                Console.WriteLine("Deleted Family {0}", documentName);
+            }
+            catch (DocumentClientException de)
+            {
+                throw;
             }
         }
 
